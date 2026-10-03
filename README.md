@@ -1,16 +1,22 @@
 <!-- zc:header (generated from the registry; edit repos/registry.json) -->
-# Cloudflare challenge solver: get a cf_clearance cookie
+# Cloudflare WAF and 5-second challenge solver: get a cf_clearance cookie
 
 [![CI](https://github.com/ZeroCaptcha/cloudflare-challenge-solver/actions/workflows/ci.yml/badge.svg)](https://github.com/ZeroCaptcha/cloudflare-challenge-solver/actions/workflows/ci.yml)
 
-Cloudflare challenge solver: pass a Cloudflare "Just a moment..." challenge page through your own proxy and get the cf_clearance cookie with the user agent it is bound to. A tested Python example with the standard library only, and a curl recipe.
+Cloudflare WAF and 5-second challenge solver: pass a Cloudflare "Just a moment..." or "Checking your browser" challenge page through your own proxy and get the cf_clearance cookie with the user agent it is bound to. A tested Python example with the standard library only, and a curl recipe.
 
 [Website](https://zerocaptcha.io/cloudflare-challenge-solver) · [Docs](https://zerocaptcha.io/docs) · [Quickstart](https://zerocaptcha.io/docs/quickstart) · [API reference](https://zerocaptcha.io/docs/reference/api) · [Pricing](https://zerocaptcha.io/pricing)
 <!-- /zc:header -->
 
 ## What it does
 
-Some sites answer a first visit with a Cloudflare challenge page instead of the page itself: the WAF's managed, JS or interactive challenge, the one that says "Just a moment...". A browser that passes it gets a `cf_clearance` cookie, and the site lets it through while the cookie is valid.
+Some sites answer a first visit with a Cloudflare challenge page instead of the page itself. It goes by several names, all one thing to solve:
+
+- **Cloudflare WAF challenge:** a WAF rule (custom, rate limiting or IP Access) whose action is Managed Challenge, Non-Interactive Challenge or Interactive Challenge. Bot Fight Mode and Under Attack mode show the same page.
+- **"Just a moment..." or "Checking your browser":** the interstitial page itself, answered with HTTP 403 and the header `cf-mitigated: challenge`.
+- **The 5-second challenge:** the old name for Cloudflare's JavaScript challenge, after the few seconds its page took. Today it is a Managed or Non-Interactive Challenge (`js_challenge`), which Cloudflare says typically takes less than five seconds.
+
+A browser that passes it gets a `cf_clearance` cookie, and the site lets it through while the cookie is valid.
 
 `cf_clearance.py` gets that cookie for you from the ZeroCaptcha API, through **your own proxy**, together with the user agent it is bound to, and then fetches the page with both, through the same proxy. It is written for sites you own or are allowed to automate, such as your own staging site behind Cloudflare's WAF, or a partner's feed you have permission to read.
 
@@ -63,7 +69,7 @@ curl --proxy "$PROXY_URL" \
 
 ## How it works
 
-1. `POST /v1/tasks` with `{"type": "CloudflareChallengeTask", "websiteURL": ..., "proxy": ...}`. The task's price is held on your balance.
+1. `POST /v1/tasks` with `{"type": "CloudflareChallengeTask", "websiteURL": ..., "proxy": ...}` and an `Idempotency-Key` header, so a retry never makes a second task. Add `"callbackUrl"` to have the result POSTed to you when the task ends ([Polling and callbacks](https://zerocaptcha.io/docs/callbacks)). The task's price is held on your balance.
 2. ZeroCaptcha opens the page through your proxy, passes the challenge, and keeps the cookie Cloudflare sets.
 3. `GET /v1/tasks/{id}` every 2 seconds until the task has `succeeded`: `solution.cookie.value` is the `cf_clearance` cookie and `solution.userAgent` is the user agent it was earned with. The held price is charged. A task that fails or expires costs nothing.
 
@@ -88,6 +94,9 @@ The challenge's own script could not load, often because of an ad blocker or a n
 
 **Which challenge types does it pass?**
 The managed, JS and interactive challenges a Cloudflare WAF rule shows; the [challenge types article](https://zerocaptcha.io/blog/cloudflare-challenge-types) explains each.
+
+**Is this the Cloudflare 5-second challenge?**
+Yes, under its current names. The 5-second challenge was the JavaScript challenge page; today a WAF rule shows a Managed or Non-Interactive Challenge in its place. The [5-second challenge article](https://zerocaptcha.io/blog/cloudflare-5-second-challenge) has the history and the request.
 
 **What does it cost?**
 The [pricing page](https://zerocaptcha.io/pricing) lists the challenge-page price per 1,000 solved tasks. Only a task that succeeds is charged.
